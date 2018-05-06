@@ -1,24 +1,35 @@
 package com.zxy.mysqlmanagement;
 
 import android.content.ComponentName;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.support.annotation.NonNull;
+import android.support.design.widget.NavigationView;
+import android.support.v4.widget.DrawerLayout;
+import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.widget.Toolbar;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.zxy.mysqlmanagement.model.ConnectionProperties;
+import com.zxy.mysqlmanagement.util.DBHelper;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
@@ -32,10 +43,11 @@ import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
 
     public static final String alipay_person_qr="HTTPS://QR.ALIPAY.COM/FKX03040WLPHIWRHMSGXD6";
 
+    private EditText connectionName;
     private EditText host;
     private EditText port;
     private EditText DBName;
@@ -43,17 +55,33 @@ public class MainActivity extends AppCompatActivity {
     private EditText password;
     private Button testConnect;
     private Button connect;
+
+    private ActionBarDrawerToggle mDrawerToggle;
+    private DrawerLayout drawerLayout;
+    private Toolbar toolbar;
+    private NavigationView nav_view;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        connectionName = findViewById(R.id.connectionName);
+        host = findViewById(R.id.host);
+        port = findViewById(R.id.port);
+        DBName = findViewById(R.id.DBName);
+        user = findViewById(R.id.user);
+        password = findViewById(R.id.password);
+        connect = findViewById(R.id.connect);
         testConnect = findViewById(R.id.testConnect);
         connect = findViewById(R.id.connect);
+        nav_view=findViewById(R.id.nav_view);
+        connectionName=findViewById(R.id.connectionName);
+
         testConnect.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-            new Thread(testConn).start();
+                new Thread(testConn).start();
 
             }
         });
@@ -65,8 +93,169 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        //初始化NavigationItem
+        initNavigationItem();
+        toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+        drawerLayout = findViewById(R.id.drawer_layout);
+        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
+                this, drawerLayout, toolbar,0, 0);
+        drawerLayout.addDrawerListener(toggle);
+        toggle.syncState();
+        nav_view.setNavigationItemSelectedListener(this);
 
     }
+
+    //初始化NavigationItem
+    public void initNavigationItem() {
+        Menu menu = nav_view.getMenu();
+        DBHelper dbHelper = new DBHelper(this, 1);
+        SQLiteDatabase database = dbHelper.getReadableDatabase();
+
+        Cursor cursor = database.rawQuery("select connectionName from connection",null);
+        while (cursor.moveToNext()) {
+            menu.add(cursor.getString(0));
+        }
+
+        if (menu.size() > 0) {
+            MenuItem item = menu.getItem(0);
+            Cursor cursor1 = database.rawQuery("select host,port,DBName,user,password from connection where connectionName=?",new String[]{item.getTitle().toString()});
+            if (cursor1.moveToFirst()) {
+                connectionName.setText(item.getTitle());
+                host.setText(cursor1.getString(0));
+                port.setText(cursor1.getString(1));
+                DBName.setText(cursor1.getString(2));
+                user.setText(cursor1.getString(3));
+                password.setText(cursor1.getString(4));
+            }
+            cursor1.close();
+        }
+        cursor.close();
+        database.close();
+    }
+
+    //保存连接
+    public void saveConnection(View view) {
+
+        Menu menu = nav_view.getMenu();
+        String name = connectionName.getText().toString();
+        ConnectionProperties cp = new ConnectionProperties();
+        cp.setConnectionName(name);
+        cp.setHost(host.getText().toString());
+        cp.setPort(port.getText().toString());
+        cp.setDBName(DBName.getText().toString());
+        cp.setUser(user.getText().toString());
+        cp.setPassword(password.getText().toString());
+
+        DBHelper dbHelper = new DBHelper(this, 1);
+        SQLiteDatabase database = dbHelper.getReadableDatabase();
+
+        if (!"".equals(name)) {
+            Cursor cursor = database.rawQuery("select count(*) from connection where connectionName=?", new String[]{name});
+            if (cursor.moveToNext()) {
+                int count = cursor.getInt(0);
+                //如果存在记录(count == 1),执行update，否则执行insert
+                if (count == 1) {
+                    ContentValues values = new ContentValues();
+                    values.put("connectionName", connectionName.getText().toString());
+                    values.put("host",host.getText().toString());
+                    values.put("port",port.getText().toString());
+                    values.put("DBName",DBName.getText().toString());
+                    values.put("user",user.getText().toString());
+                    values.put("password",password.getText().toString());
+                    database.update("connection", values,"connectionName=?", new String[]{name});
+                    Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show();
+                } else {
+                    //添加记录
+                    ContentValues values = new ContentValues();
+                    values.put("connectionName", connectionName.getText().toString());
+                    values.put("host",host.getText().toString());
+                    values.put("port",port.getText().toString());
+                    values.put("DBName",DBName.getText().toString());
+                    values.put("user",user.getText().toString());
+                    values.put("password",password.getText().toString());
+                    database.insert("connection",null,values);
+                    Toast.makeText(this, "保存成功", Toast.LENGTH_SHORT).show();
+                    nav_view.getMenu().add(1,menu.size()+1,1,this.connectionName.getText().toString());
+                }
+                cursor.close();
+                database.close();
+            }
+        } else {
+            Toast.makeText(this, "连接名不能为空", Toast.LENGTH_SHORT).show();
+        }
+
+
+    }
+
+    //删除连接
+    public void deleteConnection(View view) {
+        String name = connectionName.getText().toString();
+        DBHelper dbHelper = new DBHelper(this, 1);
+        SQLiteDatabase database = dbHelper.getReadableDatabase();
+        Menu menu = nav_view.getMenu();
+        for (int i = 0,size=menu.size(); i < size; i++) {
+            MenuItem menuItem = menu.getItem(i);
+            Log.i("menuItem删除前：", ""+menuItem.getTitle().toString()+" menuItem删除前的id:"+menuItem.getItemId());
+        }
+        for (int i = 0,size=menu.size(); i < size; i++) {
+            MenuItem menuItem = menu.getItem(i);
+            if (menuItem.getTitle().toString().equals(name)) {
+                menu.removeItem(menuItem.getItemId());
+                Log.i("tag", "删除的title"+menuItem.getTitle().toString()+" 删除的connectionName"+name+" 删除的id:"+menuItem.getItemId());
+                break;
+            }
+        }
+        for (int i = 0,size=menu.size(); i < size; i++) {
+            MenuItem menuItem = menu.getItem(i);
+            Log.i("menuItem删除后：", ""+menuItem.getTitle().toString()+" menuItem删除后的id:"+menuItem.getItemId());
+        }
+
+        int delete = database.delete("connection", "connectionName=?", new String[]{name});
+        if (delete > 0) {
+            connectionName.setText("");
+            host.setText("");
+            port.setText("");
+            DBName.setText("");
+            user.setText("");
+            password.setText("");
+
+            Toast.makeText(this, "删除成功"+name, Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "删除失败", Toast.LENGTH_SHORT).show();
+
+        }
+
+    }
+
+    //NavigationItem点击事件
+    @Override
+    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+        String name = item.getTitle().toString();
+        //String host,port,DBName,user,password;
+        DBHelper dbHelper = new DBHelper(this, 1);
+        SQLiteDatabase database = dbHelper.getReadableDatabase();
+        Toast.makeText(this, "点击了"+name, Toast.LENGTH_SHORT).show();
+        Cursor cursor = database.rawQuery("select host,port,DBName,user,password from connection where connectionName=?", new String[]{name});
+        if (cursor.moveToNext()) {
+            connectionName.setText(name);
+            host.setText(cursor.getString(0));
+            port.setText(cursor.getString(1));
+            DBName.setText(cursor.getString(2));
+            user.setText(cursor.getString(3));
+            password.setText(cursor.getString(4));
+            drawerLayout.closeDrawers();
+            connectionName.setSelection(name.length());
+
+        } else {
+            Toast.makeText(this, "不存在此连接信息", Toast.LENGTH_SHORT).show();
+        }
+
+        cursor.close();
+        database.close();
+        return true;
+    }
+
     Handler handler=new Handler(){
         @Override
         public void handleMessage(Message msg) {
@@ -90,12 +279,6 @@ public class MainActivity extends AppCompatActivity {
         private Connection connection;
         @Override
         public void run() {
-            host = findViewById(R.id.host);
-            port = findViewById(R.id.port);
-            DBName = findViewById(R.id.DBName);
-            user = findViewById(R.id.user);
-            password = findViewById(R.id.password);
-            connect = findViewById(R.id.connect);
             String url = "jdbc:mysql://" + host.getText().toString() + ":" + port.getText().toString() + "/" + DBName.getText().toString();
             Log.i("mysql", "onClick: " + url+","+user.getText().toString());
 
@@ -137,12 +320,6 @@ public class MainActivity extends AppCompatActivity {
         public void run() {
             //Looper.prepare();
 
-            host = findViewById(R.id.host);
-            port = findViewById(R.id.port);
-            DBName = findViewById(R.id.DBName);
-            user = findViewById(R.id.user);
-            password = findViewById(R.id.password);
-            connect = findViewById(R.id.connect);
             String url = "jdbc:mysql://" + host.getText().toString() + ":" + port.getText().toString() + "/" + DBName.getText().toString()+"?useSSL=false";
             Log.i("mysql", "onClick: " + url+","+user.getText().toString());
             try {
@@ -211,8 +388,8 @@ public class MainActivity extends AppCompatActivity {
     private static Boolean isExit = false;
 
     private void exitBy2Click() {
-        Timer tExit = null;
-        if (isExit == false) {
+        Timer tExit;
+        if (!isExit) {
             isExit = true; // 准备退出
             Toast.makeText(this, "再按一次退出程序", Toast.LENGTH_SHORT).show();
             tExit = new Timer();
@@ -245,9 +422,8 @@ public class MainActivity extends AppCompatActivity {
         getMenuInflater().inflate(R.menu.main_menu,menu);
         return true;
     }
-
+    //检测是否安装了支付宝
     public static boolean checkAliPayInstalled(Context context) {
-
         Uri uri = Uri.parse("alipays://platformapi/startApp");
         Intent intent = new Intent(Intent.ACTION_VIEW, uri);
         ComponentName componentName = intent.resolveActivity(context.getPackageManager());
@@ -281,4 +457,5 @@ public class MainActivity extends AppCompatActivity {
 
         return super.onOptionsItemSelected(item);
     }
+
 }

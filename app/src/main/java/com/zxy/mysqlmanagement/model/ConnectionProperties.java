@@ -3,21 +3,32 @@ package com.zxy.mysqlmanagement.model;
 import java.io.Serializable;
 
 public class ConnectionProperties implements Serializable{
+    private String connectionName;
     private String host;
     private String port;
     private String DBName;
     private String user;
     private String password;
 
+
     @Override
     public String toString() {
         return "ConnectionProperties{" +
-                "host='" + host + '\'' +
+                "connectionName='" + connectionName + '\'' +
+                ", host='" + host + '\'' +
                 ", port='" + port + '\'' +
                 ", DBName='" + DBName + '\'' +
                 ", user='" + user + '\'' +
                 ", password='" + password + '\'' +
                 '}';
+    }
+
+    public String getConnectionName() {
+        return connectionName;
+    }
+
+    public void setConnectionName(String connectionName) {
+        this.connectionName = connectionName;
     }
 
     public String getHost() {
